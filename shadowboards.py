@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, simpledialog
 from PIL import Image, ImageTk
 import cv2
 import numpy as np
@@ -31,6 +31,7 @@ running = True
 image_count = 0
 svg_files = []
 output_directory = ""
+run_title = ""
 
 
 # Function to capture image and convert to SVG
@@ -151,15 +152,26 @@ def combine_svgs():
 
 # Function to select a directory
 def select_directory():
-    global output_directory
-    directory = filedialog.askdirectory()
+    global output_directory, run_title, image_count
+    directory = filedialog.askdirectory(title="Choose a folder to save your files")
+    run_title = simpledialog.askstring(title="Folder Name", prompt="What do you want to name the folder your files are stored in? (ex. Run 1)")
     if directory:
-        output_directory = directory
-        messagebox.showinfo(
-            f"Selected Directory: {directory}", f"Selected Directory: {directory}"
-        )
+        output_directory = os.path.join(directory, run_title)
+        lbl_selected_dir.config(text=f"Output Directory: {output_directory}")
+        
+        # Ensure the photos and svgs directories exist
+        photos_dir = os.path.join(output_directory, "photos")
+        os.makedirs(photos_dir, exist_ok=True)
+        
+        # Check the existing files in the photos directory and reset image_count accordingly
+        existing_images = [f for f in os.listdir(photos_dir) if f.endswith('.jpg')]
+        image_count = len(existing_images)  # Set the image_count based on existing images
+        
+        # Update the label for Photos Processed after selecting the directory
+        lbl_pics_taken.config(text=f"Photos Processed: {image_count}")
     else:
         lbl_selected_dir.config(text="No Directory Selected")
+
 
 
 # Function to update the live camera feed in the GUI
@@ -196,6 +208,25 @@ def monitor_gpio():
 
         # Continuously check GPIO state
         root.after(100, monitor_gpio)  # Schedule this function to run every 100ms
+        
+# Function to restart for a new process
+def start_another_process():
+    global running, image_count, svg_files, output_directory, run_title
+    
+    # Reset global variables
+    running = True
+    image_count = 0  # Reset image count to 0
+    svg_files = []
+    output_directory = ""
+    run_title = ""
+    
+    # Update the label for Photos Processed to reflect the reset
+    lbl_pics_taken.config(text=f"Photos Processed: {image_count}")
+    
+    # Rerun user variable initialization
+    select_directory() 
+
+    
 
 
 # Function to end the program on quitting
@@ -212,12 +243,12 @@ root = tk.Tk()
 root.title("SVG Capture Tool")
 
 # Adjust the window size
-root.geometry("1200x650")
+root.geometry("1024x600")
 root.configure(bg="#B5C689")
 
 # Create a main frame to hold the widgets
 main_frame = tk.Frame(root, bg="#B5C689")
-main_frame.pack(pady=20, padx=20)
+main_frame.pack(pady=0, padx=0)
 
 # Create a button to open the directory selection dialog
 btn_select_dir = tk.Button(
@@ -228,7 +259,7 @@ btn_select_dir = tk.Button(
     bg="#FF5722",
     fg="white",
 )
-btn_select_dir.grid(row=1, column=0, padx=10, pady=10)
+btn_select_dir.grid(row=0, column=0, padx=0, pady=0)
 
 # Create a button to capture a photo and convert it to SVG
 btn_capture = tk.Button(
@@ -239,16 +270,7 @@ btn_capture = tk.Button(
     bg="#2196F3",
     fg="white",
 )
-btn_capture.grid(row=2, column=0, padx=10, pady=10)
-
-# Display a label for the number of pictures taken
-lbl_pics_taken = tk.Label(
-    main_frame,
-    text=f"Photos Processed: {image_count}",
-    font=("Arial", 12),
-    bg="#f0f0f0",
-)
-lbl_pics_taken.grid(row=4, column=0, padx=10, pady=10)
+btn_capture.grid(row=1, column=0, padx=0, pady=0)
 
 # Create a button to combine all SVGs
 btn_combine_svgs = tk.Button(
@@ -259,7 +281,37 @@ btn_combine_svgs = tk.Button(
     bg="#4CAF50",
     fg="white",
 )
-btn_combine_svgs.grid(row=3, column=0, padx=10, pady=10)
+btn_combine_svgs.grid(row=2, column=0, padx=0, pady=0)
+
+
+# Create a button to restart
+btn_restart = tk.Button(
+    main_frame,
+    text="Start Again",
+    font=("Arial", 12),
+    command=start_another_process,
+    bg="#2196F3",
+    fg="black",
+)
+btn_restart.grid(row=3, column=0, padx=0, pady=0)
+
+# Display a label for the number of pictures taken
+lbl_pics_taken = tk.Label(
+    main_frame,
+    text=f"Photos Processed: {image_count}",
+    font=("Arial", 12),
+    bg="#B5C689",
+)
+lbl_pics_taken.grid(row=4, column=0, padx=0, pady=0)
+
+# Display a label for the currently selected directory
+lbl_selected_dir = tk.Label(
+    root,
+    text=f"Output Directory: {output_directory}",
+    font=("Arial", 12),
+    bg="#B5C689",
+)
+lbl_selected_dir.place(x=4, y=500)
 
 # Create a button to quit the app
 btn_quit = tk.Button(
@@ -270,12 +322,12 @@ btn_quit = tk.Button(
     bg="red",
     fg="white",
 )
-btn_quit.grid(row=5, column=0, padx=10, pady=10)
+btn_quit.grid(row=6, column=0, padx=0, pady=20)
 
 
 # Create a label to show the live camera feed on the right side
 lbl_camera = tk.Label(main_frame, bg="#000000", width=640, height=480)
-lbl_camera.grid(row=0, column=1, rowspan=4, padx=10, pady=10)
+lbl_camera.grid(row=0, column=1, rowspan=4, padx=0, pady=0)
 
 # Create a blank placeholder image
 blank_img = Image.new("RGB", (200, 200), color=(0, 0, 0))  # Black image
@@ -285,7 +337,7 @@ blank_imgtk = ImageTk.PhotoImage(blank_img)
 lbl_last_photo_text = tk.Label(
     main_frame, text="Last Photo Processed", font=("Arial", 12), bg="#B5C689"
 )
-lbl_last_photo_text.grid(row=0, column=2, padx=10, pady=10)
+lbl_last_photo_text.grid(row=0, column=2, padx=0, pady=0)
 lbl_last_photo = tk.Label(
     main_frame, bg="#000000", width=200, height=200, image=blank_imgtk
 )
@@ -300,6 +352,9 @@ update_camera_feed()
 
 # Start monitoring the GPIO buttons
 monitor_gpio()
+
+# Prompt the user to select a directory on app startup
+select_directory()
 
 # Run the GUI main loop
 root.mainloop()
