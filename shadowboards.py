@@ -33,6 +33,24 @@ svg_files = []
 output_directory = ""
 run_title = ""
 
+# Function to switch to the main app screen
+def go_to_app():
+    home_frame.pack_forget()
+    main_frame.pack(padx=0, pady=0)
+    
+    # Show the directory label
+    lbl_selected_dir.place(x=4, y=500)
+    
+    # Start monitoring the GPIO buttons
+    monitor_gpio()
+
+    # Prompt the user to select a directory on app startup
+    select_directory()
+
+# Function to allow the user to open the docs
+def open_docs():
+    webbrowser.open("https://docs.example.com")
+    
 
 # Function to capture image and convert to SVG
 def capture_and_convert_to_svg():
@@ -246,6 +264,27 @@ root.title("SVG Capture Tool")
 root.geometry("1024x600")
 root.configure(bg="#B5C689")
 
+# ------------- HOME SCREEN FRAME -------------
+home_frame = tk.Frame(root, bg="#B5C689")
+
+# Add a welcome label
+lbl_welcome = tk.Label(home_frame, text="Welcome to the SVG Capture Tool", font=("Arial", 20), bg="#B5C689")
+lbl_welcome.pack(pady=20)
+
+# Add buttons for the home screen
+btn_go_to_app = tk.Button(home_frame, text="Go to App", font=("Arial", 16), command=go_to_app, bg="#2196F3", fg="white")
+btn_go_to_app.pack(pady=10)
+
+btn_open_docs = tk.Button(home_frame, text="Open Docs", font=("Arial", 16), command=open_docs, bg="#4CAF50", fg="white")
+btn_open_docs.pack(pady=10)
+
+btn_quit = tk.Button(home_frame, text="Quit", font=("Arial", 16), command=quit_program, bg="red", fg="white")
+btn_quit.pack(pady=10)
+
+# Pack the home frame (this is the first screen the user will see)
+home_frame.pack(padx=20, pady=20)
+
+# ------------- APP SCREEN FRAME -------------
 # Create a main frame to hold the widgets
 main_frame = tk.Frame(root, bg="#B5C689")
 main_frame.pack(pady=0, padx=0)
@@ -291,7 +330,7 @@ btn_restart = tk.Button(
     font=("Arial", 12),
     command=start_another_process,
     bg="#2196F3",
-    fg="black",
+    fg="white",
 )
 btn_restart.grid(row=3, column=0, padx=0, pady=0)
 
@@ -312,6 +351,7 @@ lbl_selected_dir = tk.Label(
     bg="#B5C689",
 )
 lbl_selected_dir.place(x=4, y=500)
+lbl_selected_dir.place_forget()
 
 # Create a button to quit the app
 btn_quit = tk.Button(
@@ -350,11 +390,8 @@ picam2.start()
 # Start updating the camera feed
 update_camera_feed()
 
-# Start monitoring the GPIO buttons
-monitor_gpio()
-
-# Prompt the user to select a directory on app startup
-select_directory()
+# Initially hide the main_frame
+main_frame.pack_forget()
 
 # Run the GUI main loop
 root.mainloop()
