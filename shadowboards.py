@@ -9,6 +9,7 @@ import tempfile
 from picamera2 import Picamera2
 import RPi.GPIO as GPIO
 import time
+import webbrowser
 
 # Initialize the camera
 picam2 = Picamera2()
@@ -40,9 +41,6 @@ def go_to_app():
     
     # Show the directory label
     lbl_selected_dir.place(x=4, y=500)
-    
-    # Start monitoring the GPIO buttons
-    monitor_gpio()
 
     # Prompt the user to select a directory on app startup
     select_directory()
@@ -209,23 +207,38 @@ def update_camera_feed():
 # Function to monitor button presses
 def monitor_gpio():
     if running:
-        # Check if the red button (Quit) is pressed
-        if GPIO.input(red_button_pin) == GPIO.LOW:
-            quit_program()  # Clean up GPIO and quit the app
-            time.sleep(0.2)  # Debounce delay
+        # Detect if we're on the home screen or in the app
+        if home_frame.winfo_ismapped():  # If home screen is visible
+            # Home screen actions
+            if GPIO.input(red_button_pin) == GPIO.LOW:
+                quit_program()  # Quit the app (mapped to the red button)
+                time.sleep(0.2)  # Debounce delay
+                
+            if GPIO.input(blue_button_pin) == GPIO.LOW:
+                go_to_app()  # Start the app (mapped to the blue button)
+                time.sleep(0.2)  # Debounce delay
 
-        # Check if the blue button (Capture Photo) is pressed
-        if GPIO.input(blue_button_pin) == GPIO.LOW:
-            capture_and_convert_to_svg()  # Calls the function to capture a photo
-            time.sleep(0.2)  # Debounce delay
+            if GPIO.input(green_button_pin) == GPIO.LOW:
+                open_docs()  # Open the docs (mapped to the green button)
+                time.sleep(0.2)  # Debounce delay
 
-        # Check if the green button (Combine SVGs) is pressed
-        if GPIO.input(green_button_pin) == GPIO.LOW:
-            combine_svgs()  # Calls the function to combine SVGs
-            time.sleep(0.2)  # Debounce delay
+        elif main_frame.winfo_ismapped():  # If the main app screen is visible
+            # App screen actions
+            if GPIO.input(red_button_pin) == GPIO.LOW:
+                quit_program()  # Quit the app (mapped to the red button)
+                time.sleep(0.2)  # Debounce delay
+
+            if GPIO.input(blue_button_pin) == GPIO.LOW:
+                capture_and_convert_to_svg()  # Capture photo (mapped to the blue button)
+                time.sleep(0.2)  # Debounce delay
+
+            if GPIO.input(green_button_pin) == GPIO.LOW:
+                combine_svgs()  # Combine SVGs (mapped to the green button)
+                time.sleep(0.2)  # Debounce delay
 
         # Continuously check GPIO state
         root.after(100, monitor_gpio)  # Schedule this function to run every 100ms
+
         
 # Function to restart for a new process
 def start_another_process():
@@ -272,7 +285,7 @@ lbl_welcome = tk.Label(home_frame, text="Welcome to the SVG Capture Tool", font=
 lbl_welcome.pack(pady=20)
 
 # Add buttons for the home screen
-btn_go_to_app = tk.Button(home_frame, text="Go to App", font=("Arial", 16), command=go_to_app, bg="#2196F3", fg="white")
+btn_go_to_app = tk.Button(home_frame, text="Start App", font=("Arial", 16), command=go_to_app, bg="#2196F3", fg="white")
 btn_go_to_app.pack(pady=10)
 
 btn_open_docs = tk.Button(home_frame, text="Open Docs", font=("Arial", 16), command=open_docs, bg="#4CAF50", fg="white")
@@ -280,6 +293,10 @@ btn_open_docs.pack(pady=10)
 
 btn_quit = tk.Button(home_frame, text="Quit", font=("Arial", 16), command=quit_program, bg="red", fg="white")
 btn_quit.pack(pady=10)
+
+# Add a welcome label
+lbl_instructions = tk.Label(home_frame, text="Tap an option or use the button the corresponds with its colour.", font=("Arial", 20), bg="#B5C689")
+lbl_instructions.pack(pady=20)
 
 # Pack the home frame (this is the first screen the user will see)
 home_frame.pack(padx=20, pady=20)
@@ -392,6 +409,9 @@ update_camera_feed()
 
 # Initially hide the main_frame
 main_frame.pack_forget()
+
+# Start monitoring the GPIO buttons
+monitor_gpio()
 
 # Run the GUI main loop
 root.mainloop()
