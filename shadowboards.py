@@ -27,6 +27,7 @@ GPIO.setup(blue_button_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 GPIO.setup(green_button_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
 # Global variables
+running = True
 image_count = 0
 svg_files = []
 output_directory = ""
@@ -56,7 +57,7 @@ def capture_and_convert_to_svg():
 
     # Load the last captured image and display it on the label
     last_img = Image.open(image_path)
-    last_img = last_img.resize((200, 200))  # Resize for display
+    last_img = last_img.resize((200, 200))
     last_imgtk = ImageTk.PhotoImage(last_img)
 
     lbl_last_photo.imgtk = last_imgtk  # Keep a reference to avoid garbage collection
@@ -107,6 +108,10 @@ def combine_svgs():
     # Create a header for the combined SVG file
     svg_header = """<svg xmlns="http://www.w3.org/2000/svg" version="1.1">\n"""
     svg_footer = """</svg>"""
+    
+    # Set an initial Y position and choose vertical spacing
+    y_position = 0
+    vertical_spacing = 500
 
     # Open the combined SVG file
     with open(combined_svg_path, "w") as combined_svg:
@@ -124,8 +129,13 @@ def combine_svgs():
 
                 # Remove the closing </svg> tag from the body
                 svg_body = svg_body.replace("</svg>", "")
+                
+                # Wrap each SVG content in a <g> element and translate its position
+                translated_svg_body = f'<g transform="translate(0, {y_position})">\n{svg_body}\n</g>\n'
+                combined_svg.write(translated_svg_body)
 
-                combined_svg.write(svg_body)
+                # Update the Y position for the next SVG
+                y_position += vertical_spacing
 
         combined_svg.write(svg_footer)
 
@@ -168,29 +178,33 @@ def update_camera_feed():
 
 # Function to monitor button presses
 def monitor_gpio():
-    # Check if the red button (Quit) is pressed
-    if GPIO.input(red_button_pin) == GPIO.LOW:
-        quit_program()  # Clean up GPIO and quit the app
-        time.sleep(0.2)  # Debounce delay
+    if running:
+        # Check if the red button (Quit) is pressed
+        if GPIO.input(red_button_pin) == GPIO.LOW:
+            quit_program()  # Clean up GPIO and quit the app
+            time.sleep(0.2)  # Debounce delay
 
-    # Check if the blue button (Capture Photo) is pressed
-    if GPIO.input(blue_button_pin) == GPIO.LOW:
-        capture_and_convert_to_svg()  # Calls the function to capture a photo
-        time.sleep(0.2)  # Debounce delay
+        # Check if the blue button (Capture Photo) is pressed
+        if GPIO.input(blue_button_pin) == GPIO.LOW:
+            capture_and_convert_to_svg()  # Calls the function to capture a photo
+            time.sleep(0.2)  # Debounce delay
 
-    # Check if the green button (Combine SVGs) is pressed
-    if GPIO.input(green_button_pin) == GPIO.LOW:
-        combine_svgs()  # Calls the function to combine SVGs
-        time.sleep(0.2)  # Debounce delay
+        # Check if the green button (Combine SVGs) is pressed
+        if GPIO.input(green_button_pin) == GPIO.LOW:
+            combine_svgs()  # Calls the function to combine SVGs
+            time.sleep(0.2)  # Debounce delay
 
-    # Continuously check GPIO state
-    root.after(100, monitor_gpio)  # Schedule this function to run every 100ms
+        # Continuously check GPIO state
+        root.after(100, monitor_gpio)  # Schedule this function to run every 100ms
 
 
 # Function to end the program on quitting
 def quit_program():
-    GPIO.cleanup()  # Clean up GPIO
-    root.quit()  # Quit the Tkinter application
+    global running
+    running = False  # Stop the GPIO monitoring loop
+    GPIO.cleanup()  # Clean up GPIO before quitting
+    root.quit()     # Quit the Tkinter application
+
 
 
 # Create the main window
