@@ -33,6 +33,8 @@ image_count = 0
 svg_files = []
 output_directory = ""
 run_title = ""
+directory_dialog_open = False
+gpio_monitor_task = None
 
 # Function to switch to the main app screen
 def go_to_app():
@@ -169,8 +171,10 @@ def combine_svgs():
 # Function to select a directory
 def select_directory():
     global output_directory, run_title, image_count
+    directory_dialog_open = True
     directory = filedialog.askdirectory(title="Choose a folder to save your files")
     run_title = simpledialog.askstring(title="Folder Name", prompt="What do you want to name the folder your files are stored in? (ex. Run 1)")
+    directory_dialog_open = False
     if directory:
         output_directory = os.path.join(directory, run_title)
         lbl_selected_dir.config(text=f"Output Directory: {output_directory}")
@@ -206,14 +210,19 @@ def update_camera_feed():
 
 # Function to monitor button presses
 def monitor_gpio():
-    if running:
+    global gpio_monitor_task
+
+    if not running:
+        return  # Stop further GPIO monitoring if the program is quitting
+
+    try:
         # Detect if we're on the home screen or in the app
         if home_frame.winfo_ismapped():  # If home screen is visible
             # Home screen actions
             if GPIO.input(red_button_pin) == GPIO.LOW:
                 quit_program()  # Quit the app (mapped to the red button)
                 time.sleep(0.2)  # Debounce delay
-                
+
             if GPIO.input(blue_button_pin) == GPIO.LOW:
                 go_to_app()  # Start the app (mapped to the blue button)
                 time.sleep(0.2)  # Debounce delay
@@ -236,8 +245,18 @@ def monitor_gpio():
                 combine_svgs()  # Combine SVGs (mapped to the green button)
                 time.sleep(0.2)  # Debounce delay
 
-        # Continuously check GPIO state
-        root.after(100, monitor_gpio)  # Schedule this function to run every 100ms
+            if directory_dialog_open:  # Custom flag to check if directory dialog is open
+                if GPIO.input(green_button_pin) == GPIO.LOW:
+                    root.event_generate('<Return>')  # Simulate Enter key to close the dialog
+                    time.sleep(0.2)
+
+    except RuntimeError as e:
+        print(f"RuntimeError in monitor_gpio: {e}")
+        return  # Exit the function to prevent further errors
+
+    if running:
+        gpio_monitor_task = root.after(100, monitor_gpio)
+
 
         
 # Function to restart for a new process
@@ -260,12 +279,17 @@ def start_another_process():
     
 
 
-# Function to end the program on quitting
 def quit_program():
-    global running
+    global running, gpio_monitor_task
     running = False  # Stop the GPIO monitoring loop
-    GPIO.cleanup()  # Clean up GPIO before quitting
+
+    if gpio_monitor_task is not None:
+        root.after_cancel(gpio_monitor_task)  # Cancel the scheduled GPIO monitoring task
+        gpio_monitor_task = None  # Reset the task handle to avoid future issues
+
     root.quit()     # Quit the Tkinter application
+
+
 
 
 
@@ -274,7 +298,7 @@ root = tk.Tk()
 root.title("SVG Capture Tool")
 
 # Adjust the window size
-root.geometry("1024x600")
+root.geometry("1024x500")
 root.configure(bg="#B5C689")
 
 # ------------- HOME SCREEN FRAME -------------
@@ -379,7 +403,7 @@ btn_quit = tk.Button(
     bg="red",
     fg="white",
 )
-btn_quit.grid(row=6, column=0, padx=0, pady=20)
+btn_quit.grid(row=3, column=2, padx=0, pady=20)
 
 
 # Create a label to show the live camera feed on the right side
@@ -413,5 +437,10 @@ main_frame.pack_forget()
 # Start monitoring the GPIO buttons
 monitor_gpio()
 
+root.attributes("-fullscreen", True)
+
 # Run the GUI main loop
 root.mainloop()
+
+print("Cleaning up GPIO...")
+GPIO.cleanup()  # Clean up GPIO before quitting
