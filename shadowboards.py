@@ -14,6 +14,9 @@ import webbrowser
 # Initialize the camera
 picam2 = Picamera2()
 
+# Set the camera resolution to ensure consistent frame sizes
+picam2.configure(picam2.create_still_configuration(main={"size": (640, 480)}))
+
 # GPIO setup
 GPIO.setmode(GPIO.BCM)
 
@@ -36,21 +39,26 @@ run_title = ""
 directory_dialog_open = False
 gpio_monitor_task = None
 
+# Variables for crop zone selection
+start_x = None
+start_y = None
+rect_id = None
+crop_coords = None
+crop_selected = False
+rectangle_coords = None  # Store rectangle coordinates separately
+
 # Function to switch to the main app screen
 def go_to_app():
     home_frame.pack_forget()
     main_frame.pack(padx=0, pady=0)
-    
-    # Show the directory label
-    lbl_selected_dir.place(x=4, y=500)
+    root.update_idletasks()  # Force GUI update
 
-    # Prompt the user to select a directory on app startup
-    select_directory()
+    # Schedule select_directory to run after a short delay
+    root.after(100, select_directory)
 
 # Function to allow the user to open the docs
 def open_docs():
     webbrowser.open("https://docs.example.com")
-    
 
 # Function to capture image and convert to SVG
 def capture_and_convert_to_svg():
@@ -58,6 +66,10 @@ def capture_and_convert_to_svg():
 
     if not output_directory:
         messagebox.showerror("Error", "Please select an output directory first.")
+        return
+
+    if not crop_selected:
+        messagebox.showerror("Error", "Please finalize the crop zone first.")
         return
 
     # Ensure the output directory has folders for photos and SVGs
@@ -74,6 +86,21 @@ def capture_and_convert_to_svg():
     # Capture image from camera
     picam2.capture_file(image_path)
 
+    # Load the captured image
+    image = cv2.imread(image_path)
+
+    # If crop zone is selected, crop the image
+    if crop_selected and crop_coords:
+        x0, y0, x1, y1 = map(int, crop_coords)
+        # Ensure coordinates are within the image dimensions
+        x0 = max(0, min(x0, image.shape[1]))
+        x1 = max(0, min(x1, image.shape[1]))
+        y0 = max(0, min(y0, image.shape[0]))
+        y1 = max(0, min(y1, image.shape[0]))
+        image = image[y0:y1, x0:x1]
+        # Save the cropped image back to image_path
+        cv2.imwrite(image_path, image)
+
     # Load the last captured image and display it on the label
     last_img = Image.open(image_path)
     last_img = last_img.resize((200, 200))
@@ -81,9 +108,6 @@ def capture_and_convert_to_svg():
 
     lbl_last_photo.imgtk = last_imgtk  # Keep a reference to avoid garbage collection
     lbl_last_photo.configure(image=last_imgtk)
-
-    # Load the captured image
-    image = cv2.imread(image_path)
 
     # Convert the image to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -113,7 +137,6 @@ def capture_and_convert_to_svg():
 
     lbl_pics_taken.config(text=f"Photos Processed: {image_count}")
 
-
 # Function to combine all SVGs into a single file
 def combine_svgs():
     global svg_files, output_directory
@@ -124,37 +147,92 @@ def combine_svgs():
 
     combined_svg_path = os.path.join(output_directory, "combined_output.svg")
 
-    # Create a header for the combined SVG file
-    svg_header = """<svg xmlns="http://www.w3.org/2000/svg" version="1.1">\n"""
-    svg_footer = """</svg>"""
-    
-    # Set an initial Y position and choose vertical spacing
-    y_position = 0
-    vertical_spacing = 500
+    individual_svgs = []
 
-    # Open the combined SVG file
+    # Variables to calculate total width and height
+    max_width = 0
+    total_height = 0
+
+    # First, parse all SVGs to extract their width, height, and content
+    for svg_file in svg_files:
+        with open(svg_file, "r") as f:
+            svg_content = f.read()
+
+            # Extract the width and height from the SVG header
+            width = None
+            height = None
+            viewBox = None
+
+            # Find the <svg> tag
+            svg_tag_start = svg_content.find("<svg")
+            svg_tag_end = svg_content.find(">", svg_tag_start) + 1
+            svg_tag = svg_content[svg_tag_start:svg_tag_end]
+
+            # Extract width, height, and viewBox
+            import re
+            width_match = re.search(r'width="([\d\.]+)([a-zA-Z%]+)?"', svg_tag)
+            height_match = re.search(r'height="([\d\.]+)([a-zA-Z%]+)?"', svg_tag)
+            viewbox_match = re.search(r'viewBox="([^"]+)"', svg_tag)
+
+            if width_match:
+                width_value = width_match.group(1)
+                width_unit = width_match.group(2)
+                width = float(width_value)
+            else:
+                width = None
+
+            if height_match:
+                height_value = height_match.group(1)
+                height_unit = height_match.group(2)
+                height = float(height_value)
+            else:
+                height = None
+
+            if viewbox_match:
+                viewBox = viewbox_match.group(1)
+
+            # If width or height not found, try to get them from viewBox
+            if width is None or height is None:
+                if viewBox:
+                    viewBox_values = list(map(float, viewBox.strip().split()))
+                    width = viewBox_values[2] - viewBox_values[0]
+                    height = viewBox_values[3] - viewBox_values[1]
+                else:
+                    # Set default width and height if not available
+                    width = 0
+                    height = 0
+
+            # Update max_width and total_height
+            max_width = max(max_width, width)
+            total_height += height
+
+            # Extract SVG body content
+            svg_body = svg_content[svg_tag_end:]
+            svg_body = svg_body.replace("</svg>", "")
+
+            individual_svgs.append({
+                'width': width,
+                'height': height,
+                'content': svg_body
+            })
+
+    # Create a header for the combined SVG file with appropriate dimensions
+    svg_header = f"""<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="{max_width}" height="{total_height}" viewBox="0 0 {max_width} {total_height}">\n"""
+    svg_footer = """</svg>"""
+
+    # Now, write the combined SVG file
     with open(combined_svg_path, "w") as combined_svg:
         combined_svg.write(svg_header)
 
-        # Append each SVG content into the combined file
-        for svg_file in svg_files:
-            with open(svg_file, "r") as f:
-                svg_content = f.read()
+        current_y = 0  # Starting Y position
 
-                # Extract everything inside the <svg> tags
-                start_index = svg_content.find("<svg")
-                end_index = svg_content.find(">", start_index) + 1
-                svg_body = svg_content[end_index:]
+        for svg_info in individual_svgs:
+            # Wrap each SVG content in a <g> element and translate its position
+            translated_svg_body = f'<g transform="translate(0, {current_y})">\n{svg_info["content"]}\n</g>\n'
+            combined_svg.write(translated_svg_body)
 
-                # Remove the closing </svg> tag from the body
-                svg_body = svg_body.replace("</svg>", "")
-                
-                # Wrap each SVG content in a <g> element and translate its position
-                translated_svg_body = f'<g transform="translate(0, {y_position})">\n{svg_body}\n</g>\n'
-                combined_svg.write(translated_svg_body)
-
-                # Update the Y position for the next SVG
-                y_position += vertical_spacing
+            # Update the Y position for the next SVG
+            current_y += svg_info['height']
 
         combined_svg.write(svg_footer)
 
@@ -163,50 +241,153 @@ def combine_svgs():
     )
 
     # Reset the image count and svg files for the next set
+    global image_count
     image_count = 0
     svg_files = []
     lbl_pics_taken.config(text=f"Photos Processed: {image_count}")
-
-
+    
 # Function to select a directory
 def select_directory():
-    global output_directory, run_title, image_count
+    global output_directory, run_title, image_count, crop_selected, rect_id, crop_coords, rectangle_coords
+    global start_x, start_y, end_x, end_y  # Declare as global
+
     directory_dialog_open = True
     directory = filedialog.askdirectory(title="Choose a folder to save your files")
     run_title = simpledialog.askstring(title="Folder Name", prompt="What do you want to name the folder your files are stored in? (ex. Run 1)")
     directory_dialog_open = False
-    if directory:
+    if directory and run_title:
         output_directory = os.path.join(directory, run_title)
         lbl_selected_dir.config(text=f"Output Directory: {output_directory}")
-        
+
         # Ensure the photos and svgs directories exist
         photos_dir = os.path.join(output_directory, "photos")
         os.makedirs(photos_dir, exist_ok=True)
-        
+
         # Check the existing files in the photos directory and reset image_count accordingly
         existing_images = [f for f in os.listdir(photos_dir) if f.endswith('.jpg')]
         image_count = len(existing_images)  # Set the image_count based on existing images
-        
+
         # Update the label for Photos Processed after selecting the directory
         lbl_pics_taken.config(text=f"Photos Processed: {image_count}")
+
+        # Create a default rectangle that fills the canvas
+        start_x, start_y = 100, 100  # You can adjust these default values
+        end_x, end_y = 540, 380
+        crop_coords = (start_x, start_y, end_x, end_y)
+        rectangle_coords = (start_x, start_y, end_x, end_y)
+
+        # If there's an existing rectangle, delete it
+        if rect_id:
+            lbl_camera.delete(rect_id)
+        rect_id = lbl_camera.create_rectangle(start_x, start_y, end_x, end_y, outline='red', width=2)
+        lbl_camera.tag_raise(rect_id)  # Ensure rectangle is above the image
+
+        root.update_idletasks()  # Update the GUI before showing the messagebox
+        messagebox.showinfo("Select Crop Zone", "Adjust the crop zone rectangle over the live camera feed. Press the green button or Enter to finalize.")
     else:
         lbl_selected_dir.config(text="No Directory Selected")
+        
+# Function to handle the crop button click
+def handle_crop_button():
+    global crop_selected, rect_id, crop_coords
+    if crop_selected:
+        # Allow user to change the crop zone again
+        crop_selected = False
+        # Remove any existing rectangle
+        if rect_id:
+            lbl_camera.delete(rect_id)
+            rect_id = None
+        crop_coords = None
+        # Update the button text to "Confirm Crop Zone"
+        btn_crop.config(text="Confirm Crop Zone")
+        # Optionally, show a message
+        messagebox.showinfo("Change Crop Zone", "Adjust the crop zone rectangle over the live camera feed. Press the 'Confirm Crop Zone' button or Enter to finalize.")
+    else:
+        # Crop is not selected, so confirm the crop zone
+        finalize_crop_zone()
+        # Button text will be updated in finalize_crop_zone()
 
+# Function to finalize the crop zone
+def finalize_crop_zone(event=None):
+    global crop_selected, rect_id
+    if crop_coords:
+        crop_selected = True
+        messagebox.showinfo("Crop Zone Finalized", "Crop zone has been finalized.")
+        # Optionally, remove the rectangle since the live feed will now show only the cropped area.
+        if rect_id:
+            lbl_camera.delete(rect_id)
+            rect_id = None
+        # Update the button text to "Change Crop Zone"
+        btn_crop.config(text="Change Crop Zone")
 
+# Functions for crop zone selection
+def start_crop(event):
+    global start_x, start_y, rect_id
+    if crop_selected:
+        return  # Do not allow re-selection unless reset
+    start_x = event.x
+    start_y = event.y
+
+def update_crop(event):
+    global rect_id, rectangle_coords
+    if crop_selected:
+        return  # Do not allow re-selection unless reset
+    end_x, end_y = event.x, event.y
+    # Delete the previous rectangle if it exists
+    if rect_id:
+        lbl_camera.delete(rect_id)
+    rect_id = lbl_camera.create_rectangle(start_x, start_y, end_x, end_y, outline='red')
+    # Store rectangle coordinates
+    rectangle_coords = (start_x, start_y, end_x, end_y)
+    # Update crop_coords so the rectangle remains after releasing the mouse
+    crop_coords = rectangle_coords
+
+def finish_crop(event):
+    global crop_coords
+    if crop_selected:
+        return  # Do not allow re-selection unless reset
+    end_x, end_y = event.x, event.y
+    x0 = min(start_x, end_x)
+    y0 = min(start_y, end_y)
+    x1 = max(start_x, end_x)
+    y1 = max(start_y, end_y)
+    crop_coords = (x0, y0, x1, y1)
+    # Rectangle remains on the canvas
 
 # Function to update the live camera feed in the GUI
 def update_camera_feed():
     frame = picam2.capture_array()  # Capture a frame from the camera
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # Convert the frame to RGB
 
+    # If crop zone is selected, crop the frame
+    if crop_selected and crop_coords:
+        x0, y0, x1, y1 = map(int, crop_coords)
+        # Ensure coordinates are within the frame dimensions
+        x0 = max(0, min(x0, frame.shape[1]))
+        x1 = max(0, min(x1, frame.shape[1]))
+        y0 = max(0, min(y0, frame.shape[0]))
+        y1 = max(0, min(y1, frame.shape[0]))
+        frame = frame[y0:y1, x0:x1]
+        # Resize the frame to fit the canvas
+        frame = cv2.resize(frame, (640, 480), interpolation=cv2.INTER_AREA)
+    else:
+        # Resize the frame to fit the canvas
+        frame = cv2.resize(frame, (640, 480), interpolation=cv2.INTER_AREA)
+
     img = Image.fromarray(frame)  # Convert frame to a PIL image
     imgtk = ImageTk.PhotoImage(image=img)  # Convert PIL image to ImageTk format
 
-    lbl_camera.imgtk = imgtk  # Keep a reference to avoid garbage collection
-    lbl_camera.configure(image=imgtk)  # Update the label with the new image
+    # Remove the previous image
+    lbl_camera.delete('live_image')
+
+    # Display the image
+    lbl_camera.imgtk = imgtk
+    image_id = lbl_camera.create_image(0, 0, anchor=tk.NW, image=imgtk, tag='live_image')
+
+    # Lower the image so that rectangle is above it
+    lbl_camera.tag_lower(image_id)
 
     lbl_camera.after(10, update_camera_feed)  # Update the camera feed every 10 ms
-
 
 # Function to monitor button presses
 def monitor_gpio():
@@ -242,7 +423,10 @@ def monitor_gpio():
                 time.sleep(0.2)  # Debounce delay
 
             if GPIO.input(green_button_pin) == GPIO.LOW:
-                combine_svgs()  # Combine SVGs (mapped to the green button)
+                if not crop_selected:
+                    finalize_crop_zone()  # Finalize crop zone (mapped to the green button)
+                else:
+                    combine_svgs()  # Combine SVGs
                 time.sleep(0.2)  # Debounce delay
 
             if directory_dialog_open:  # Custom flag to check if directory dialog is open
@@ -257,27 +441,27 @@ def monitor_gpio():
     if running:
         gpio_monitor_task = root.after(100, monitor_gpio)
 
-
-        
 # Function to restart for a new process
 def start_another_process():
-    global running, image_count, svg_files, output_directory, run_title
-    
+    global running, image_count, svg_files, output_directory, run_title, crop_selected, rect_id, rectangle_coords
     # Reset global variables
     running = True
     image_count = 0  # Reset image count to 0
     svg_files = []
     output_directory = ""
     run_title = ""
-    
+    crop_selected = False
+    rectangle_coords = None
+    # Clear the crop rectangle if it exists
+    if rect_id:
+        lbl_camera.delete(rect_id)
+        rect_id = None
     # Update the label for Photos Processed to reflect the reset
     lbl_pics_taken.config(text=f"Photos Processed: {image_count}")
-    
+    # Reset the button text
+    btn_crop.config(text="Confirm Crop Zone")
     # Rerun user variable initialization
-    select_directory() 
-
-    
-
+    select_directory()
 
 def quit_program():
     global running, gpio_monitor_task
@@ -288,10 +472,6 @@ def quit_program():
         gpio_monitor_task = None  # Reset the task handle to avoid future issues
 
     root.quit()     # Quit the Tkinter application
-
-
-
-
 
 # Create the main window
 root = tk.Tk()
@@ -318,8 +498,8 @@ btn_open_docs.pack(pady=10)
 btn_quit = tk.Button(home_frame, text="Quit", font=("Arial", 16), command=quit_program, bg="red", fg="white")
 btn_quit.pack(pady=10)
 
-# Add a welcome label
-lbl_instructions = tk.Label(home_frame, text="Tap an option or use the button the corresponds with its colour.", font=("Arial", 20), bg="#B5C689")
+# Add instructions label
+lbl_instructions = tk.Label(home_frame, text="Tap an option or use the button that corresponds with its colour.", font=("Arial", 20), bg="#B5C689")
 lbl_instructions.pack(pady=20)
 
 # Pack the home frame (this is the first screen the user will see)
@@ -363,7 +543,6 @@ btn_combine_svgs = tk.Button(
 )
 btn_combine_svgs.grid(row=2, column=0, padx=0, pady=0)
 
-
 # Create a button to restart
 btn_restart = tk.Button(
     main_frame,
@@ -386,13 +565,24 @@ lbl_pics_taken.grid(row=4, column=0, padx=0, pady=0)
 
 # Display a label for the currently selected directory
 lbl_selected_dir = tk.Label(
-    root,
-    text=f"Output Directory: {output_directory}",
+    main_frame,
+    text="Output Directory: Not selected",
     font=("Arial", 12),
     bg="#B5C689",
 )
-lbl_selected_dir.place(x=4, y=500)
-lbl_selected_dir.place_forget()
+# Place the label directly below the live camera feed
+lbl_selected_dir.grid(row=4, column=1, padx=0, pady=0)
+
+# Create a button to quit the app
+btn_crop = tk.Button(
+    main_frame,
+    text="Confirm Crop Zone",
+    font=("Arial", 12),
+    command=handle_crop_button,
+    bg="green",
+    fg="white",
+)
+btn_crop.grid(row=2, column=2, padx=0, pady=20)
 
 # Create a button to quit the app
 btn_quit = tk.Button(
@@ -405,10 +595,17 @@ btn_quit = tk.Button(
 )
 btn_quit.grid(row=3, column=2, padx=0, pady=20)
 
-
-# Create a label to show the live camera feed on the right side
-lbl_camera = tk.Label(main_frame, bg="#000000", width=640, height=480)
+# Create a canvas to show the live camera feed
+lbl_camera = tk.Canvas(main_frame, bg="#000000", width=640, height=480)
 lbl_camera.grid(row=0, column=1, rowspan=4, padx=0, pady=0)
+
+# Bind mouse events for crop zone selection
+lbl_camera.bind("<ButtonPress-1>", start_crop)
+lbl_camera.bind("<B1-Motion>", update_crop)
+lbl_camera.bind("<ButtonRelease-1>", finish_crop)
+
+# Bind the Enter key to finalize the crop zone
+root.bind('<Return>', finalize_crop_zone)
 
 # Create a blank placeholder image
 blank_img = Image.new("RGB", (200, 200), color=(0, 0, 0))  # Black image
@@ -423,7 +620,7 @@ lbl_last_photo = tk.Label(
     main_frame, bg="#000000", width=200, height=200, image=blank_imgtk
 )
 lbl_last_photo.imgtk = blank_imgtk  # Keep reference to avoid garbage collection
-lbl_last_photo.grid(row=0, column=2, rowspan=4, padx=10, pady=10)
+lbl_last_photo.grid(row=0, column=2, rowspan=2, padx=10, pady=10)
 
 # Start the camera
 picam2.start()
@@ -442,5 +639,5 @@ root.attributes("-fullscreen", True)
 # Run the GUI main loop
 root.mainloop()
 
-print("Cleaning up GPIO...")
-GPIO.cleanup()  # Clean up GPIO before quitting
+# Clean up GPIO before quitting
+GPIO.cleanup()
