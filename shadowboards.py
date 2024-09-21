@@ -305,7 +305,36 @@ def select_directory():
 
     directory_dialog_open = True
     directory = filedialog.askdirectory(title="Choose a folder to save your files")
-    run_title = simpledialog.askstring(title="Folder Name", prompt="What do you want to name the folder your files are stored in? (ex. Run 1)")
+    
+    # Create a dialog with an Entry widget for folder name input
+    folder_name_window = tk.Toplevel(root)
+    folder_name_window.title("Folder Name")
+
+    label = tk.Label(folder_name_window, text="What do you want to name the folder your files are stored in? (ex. Run 1)")
+    label.pack(pady=10)
+    
+    entry = tk.Entry(folder_name_window, width=30)
+    entry.pack(pady=10)
+
+    # Add a button to open the on-screen keyboard
+    btn_keyboard = tk.Button(folder_name_window, text="Open Keyboard", command=lambda: on_screen_keyboard(entry))
+    btn_keyboard.pack(pady=10)
+
+    def confirm_folder_name():
+        global run_title
+        run_title = entry.get()
+        folder_name_window.destroy()
+
+    # Add a confirm button to finalize the folder name
+    confirm_button = tk.Button(folder_name_window, text="Confirm", command=confirm_folder_name)
+    confirm_button.pack(pady=10)
+
+    # Set focus to the folder name window and lock the window focus
+    folder_name_window.grab_set()
+    folder_name_window.focus_force()
+
+    folder_name_window.wait_window()  # Wait for the dialog to close
+    
     directory_dialog_open = False
     if directory and run_title:
         output_directory = os.path.join(directory, run_title)
@@ -338,6 +367,46 @@ def select_directory():
         messagebox.showinfo("Select Crop Zone", "Adjust the crop zone rectangle over the live camera feed. Press the green button or Enter to finalize.")
     else:
         lbl_selected_dir.config(text="No Directory Selected")
+
+
+        
+def on_screen_keyboard(entry):
+    keyboard_window = tk.Toplevel(root)
+    keyboard_window.title("On-Screen Keyboard")
+
+    buttons = [
+        ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
+        ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
+        ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'],
+        ['z', 'x', 'c', 'v', 'b', 'n', 'm', 'Del'],
+        ['Space', 'Enter']
+    ]
+
+    def key_press(key):
+        if key == "Space":
+            entry.insert(tk.END, " ")
+        elif key == "Del":
+            current_text = entry.get()
+            entry.delete(0, tk.END)
+            entry.insert(0, current_text[:-1])
+        elif key == "Enter":
+            keyboard_window.destroy()
+        else:
+            entry.insert(tk.END, key)
+
+    for row in buttons:
+        frame = tk.Frame(keyboard_window)
+        frame.pack()
+        for button in row:
+            b = tk.Button(frame, text=button, width=5, height=2,
+                          command=lambda b=button: key_press(b))
+            b.pack(side=tk.LEFT)
+    
+    # Force the focus to the keyboard window and grab the focus
+    keyboard_window.grab_set()
+    keyboard_window.focus_force()
+
+
         
 # Function to handle the crop button click
 def handle_crop_button():
@@ -530,8 +599,14 @@ root = tk.Tk()
 root.title("SVG Capture Tool")
 
 # Adjust the window size
-root.geometry("1024x500")
 root.configure(bg="#B5C689")
+
+# Function to set fullscreen when the window is mapped
+def set_fullscreen(event=None):
+    root.attributes('-fullscreen', True)
+
+# Bind the set_fullscreen function to the <Map> event
+root.bind('<Map>', set_fullscreen)
 
 # ------------- HOME SCREEN FRAME -------------
 home_frame = tk.Frame(root, bg="#B5C689")
@@ -685,8 +760,6 @@ main_frame.pack_forget()
 
 # Start monitoring the GPIO buttons
 monitor_gpio()
-
-root.attributes("-fullscreen", True)
 
 # Run the GUI main loop
 root.mainloop()
