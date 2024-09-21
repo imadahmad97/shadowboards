@@ -59,6 +59,7 @@ crop_coords = None
 crop_selected = False
 rectangle_coords = None  # Store rectangle coordinates separately
 
+
 # Function to switch to the main app screen
 def go_to_app():
     home_frame.pack_forget()
@@ -68,9 +69,11 @@ def go_to_app():
     # Schedule select_directory to run after a short delay
     root.after(100, select_directory)
 
+
 # Function to allow the user to open the docs
 def open_docs():
     webbrowser.open("https://docs.example.com")
+
 
 # Function to capture image and convert to SVG
 def capture_and_convert_to_svg():
@@ -100,16 +103,16 @@ def capture_and_convert_to_svg():
 
     # Load the captured image
     image = cv2.imread(image_path)
-    
-    h,  w = image.shape[:2]
-    newcameramtx, roi = cv2.getOptimalNewCameraMatrix(mtx, dist, (w,h), 1, (w,h))
+
+    h, w = image.shape[:2]
+    newcameramtx, roi = cv2.getOptimalNewCameraMatrix(mtx, dist, (w, h), 1, (w, h))
 
     # undistort
     dst = cv2.undistort(image, mtx, dist, None, newcameramtx)
- 
+
     # crop the image
     x, y, w, h = roi
-    image = dst[y:y+h, x:x+w]
+    image = dst[y : y + h, x : x + w]
 
     # If crop zone is selected, crop the image
     if crop_selected and crop_coords:
@@ -170,17 +173,17 @@ def capture_and_convert_to_svg():
     root_svg = tree.getroot()
 
     # Define the SVG namespace
-    svg_ns = {'svg': 'http://www.w3.org/2000/svg'}
+    svg_ns = {"svg": "http://www.w3.org/2000/svg"}
 
     # Remove existing width, height, and viewBox attributes
-    for attr in ['width', 'height', 'viewBox']:
+    for attr in ["width", "height", "viewBox"]:
         if attr in root_svg.attrib:
             del root_svg.attrib[attr]
 
     # Set new width, height, and viewBox attributes
-    root_svg.set('width', f'{width_cm}cm')
-    root_svg.set('height', f'{height_cm}cm')
-    root_svg.set('viewBox', f'0 0 {width_px} {height_px}')
+    root_svg.set("width", f"{width_cm}cm")
+    root_svg.set("height", f"{height_cm}cm")
+    root_svg.set("viewBox", f"0 0 {width_px} {height_px}")
     print(width_cm)
     print(height_cm)
 
@@ -191,7 +194,6 @@ def capture_and_convert_to_svg():
     svg_files.append(svg_path)
 
     lbl_pics_taken.config(text=f"Photos Processed: {image_count}")
-
 
 
 # Function to combine all SVGs into a single file
@@ -294,10 +296,6 @@ def combine_svgs():
     lbl_pics_taken.config(text=f"Photos Processed: {image_count}")
 
 
-
-
-
-    
 # Function to select a directory
 def select_directory():
     global output_directory, run_title, image_count, crop_selected, rect_id, crop_coords, rectangle_coords
@@ -305,19 +303,26 @@ def select_directory():
 
     directory_dialog_open = True
     directory = filedialog.askdirectory(title="Choose a folder to save your files")
-    
+
     # Create a dialog with an Entry widget for folder name input
     folder_name_window = tk.Toplevel(root)
     folder_name_window.title("Folder Name")
 
-    label = tk.Label(folder_name_window, text="What do you want to name the folder your files are stored in? (ex. Run 1)")
+    label = tk.Label(
+        folder_name_window,
+        text="What do you want to name the folder your files are stored in? (ex. Run 1)",
+    )
     label.pack(pady=10)
-    
+
     entry = tk.Entry(folder_name_window, width=30)
     entry.pack(pady=10)
 
     # Add a button to open the on-screen keyboard
-    btn_keyboard = tk.Button(folder_name_window, text="Open Keyboard", command=lambda: on_screen_keyboard(entry))
+    btn_keyboard = tk.Button(
+        folder_name_window,
+        text="Open Keyboard",
+        command=lambda: on_screen_keyboard(entry),
+    )
     btn_keyboard.pack(pady=10)
 
     def confirm_folder_name():
@@ -326,7 +331,9 @@ def select_directory():
         folder_name_window.destroy()
 
     # Add a confirm button to finalize the folder name
-    confirm_button = tk.Button(folder_name_window, text="Confirm", command=confirm_folder_name)
+    confirm_button = tk.Button(
+        folder_name_window, text="Confirm", command=confirm_folder_name
+    )
     confirm_button.pack(pady=10)
 
     # Set focus to the folder name window and lock the window focus
@@ -334,7 +341,7 @@ def select_directory():
     folder_name_window.focus_force()
 
     folder_name_window.wait_window()  # Wait for the dialog to close
-    
+
     directory_dialog_open = False
     if directory and run_title:
         output_directory = os.path.join(directory, run_title)
@@ -345,8 +352,10 @@ def select_directory():
         os.makedirs(photos_dir, exist_ok=True)
 
         # Check the existing files in the photos directory and reset image_count accordingly
-        existing_images = [f for f in os.listdir(photos_dir) if f.endswith('.jpg')]
-        image_count = len(existing_images)  # Set the image_count based on existing images
+        existing_images = [f for f in os.listdir(photos_dir) if f.endswith(".jpg")]
+        image_count = len(
+            existing_images
+        )  # Set the image_count based on existing images
 
         # Update the label for Photos Processed after selecting the directory
         lbl_pics_taken.config(text=f"Photos Processed: {image_count}")
@@ -360,26 +369,30 @@ def select_directory():
         # If there's an existing rectangle, delete it
         if rect_id:
             lbl_camera.delete(rect_id)
-        rect_id = lbl_camera.create_rectangle(start_x, start_y, end_x, end_y, outline='red', width=2)
+        rect_id = lbl_camera.create_rectangle(
+            start_x, start_y, end_x, end_y, outline="red", width=2
+        )
         lbl_camera.tag_raise(rect_id)  # Ensure rectangle is above the image
 
         root.update_idletasks()  # Update the GUI before showing the messagebox
-        messagebox.showinfo("Select Crop Zone", "Adjust the crop zone rectangle over the live camera feed. Press the green button or Enter to finalize.")
+        messagebox.showinfo(
+            "Select Crop Zone",
+            "Adjust the crop zone rectangle over the live camera feed. Press the green button or Enter to finalize.",
+        )
     else:
         lbl_selected_dir.config(text="No Directory Selected")
 
 
-        
 def on_screen_keyboard(entry):
     keyboard_window = tk.Toplevel(root)
     keyboard_window.title("On-Screen Keyboard")
 
     buttons = [
-        ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
-        ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
-        ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'],
-        ['z', 'x', 'c', 'v', 'b', 'n', 'm', 'Del'],
-        ['Space', 'Enter']
+        ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
+        ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
+        ["a", "s", "d", "f", "g", "h", "j", "k", "l"],
+        ["z", "x", "c", "v", "b", "n", "m", "Del"],
+        ["Space", "Enter"],
     ]
 
     def key_press(key):
@@ -398,16 +411,20 @@ def on_screen_keyboard(entry):
         frame = tk.Frame(keyboard_window)
         frame.pack()
         for button in row:
-            b = tk.Button(frame, text=button, width=5, height=2,
-                          command=lambda b=button: key_press(b))
+            b = tk.Button(
+                frame,
+                text=button,
+                width=5,
+                height=2,
+                command=lambda b=button: key_press(b),
+            )
             b.pack(side=tk.LEFT)
-    
+
     # Force the focus to the keyboard window and grab the focus
     keyboard_window.grab_set()
     keyboard_window.focus_force()
 
 
-        
 # Function to handle the crop button click
 def handle_crop_button():
     global crop_selected, rect_id, crop_coords
@@ -422,11 +439,15 @@ def handle_crop_button():
         # Update the button text to "Confirm Crop Zone"
         btn_crop.config(text="Confirm Crop Zone")
         # Optionally, show a message
-        messagebox.showinfo("Change Crop Zone", "Adjust the crop zone rectangle over the live camera feed. Press the 'Confirm Crop Zone' button or Enter to finalize.")
+        messagebox.showinfo(
+            "Change Crop Zone",
+            "Adjust the crop zone rectangle over the live camera feed. Press the 'Confirm Crop Zone' button or Enter to finalize.",
+        )
     else:
         # Crop is not selected, so confirm the crop zone
         finalize_crop_zone()
         # Button text will be updated in finalize_crop_zone()
+
 
 # Function to finalize the crop zone
 def finalize_crop_zone(event=None):
@@ -441,6 +462,7 @@ def finalize_crop_zone(event=None):
         # Update the button text to "Change Crop Zone"
         btn_crop.config(text="Change Crop Zone")
 
+
 # Functions for crop zone selection
 def start_crop(event):
     global start_x, start_y, rect_id
@@ -448,6 +470,7 @@ def start_crop(event):
         return  # Do not allow re-selection unless reset
     start_x = event.x
     start_y = event.y
+
 
 def update_crop(event):
     global rect_id, rectangle_coords
@@ -457,11 +480,12 @@ def update_crop(event):
     # Delete the previous rectangle if it exists
     if rect_id:
         lbl_camera.delete(rect_id)
-    rect_id = lbl_camera.create_rectangle(start_x, start_y, end_x, end_y, outline='red')
+    rect_id = lbl_camera.create_rectangle(start_x, start_y, end_x, end_y, outline="red")
     # Store rectangle coordinates
     rectangle_coords = (start_x, start_y, end_x, end_y)
     # Update crop_coords so the rectangle remains after releasing the mouse
     crop_coords = rectangle_coords
+
 
 def finish_crop(event):
     global crop_coords
@@ -474,6 +498,7 @@ def finish_crop(event):
     y1 = max(start_y, end_y)
     crop_coords = (x0, y0, x1, y1)
     # Rectangle remains on the canvas
+
 
 # Function to update the live camera feed in the GUI
 def update_camera_feed():
@@ -499,16 +524,19 @@ def update_camera_feed():
     imgtk = ImageTk.PhotoImage(image=img)  # Convert PIL image to ImageTk format
 
     # Remove the previous image
-    lbl_camera.delete('live_image')
+    lbl_camera.delete("live_image")
 
     # Display the image
     lbl_camera.imgtk = imgtk
-    image_id = lbl_camera.create_image(0, 0, anchor=tk.NW, image=imgtk, tag='live_image')
+    image_id = lbl_camera.create_image(
+        0, 0, anchor=tk.NW, image=imgtk, tag="live_image"
+    )
 
     # Lower the image so that rectangle is above it
     lbl_camera.tag_lower(image_id)
 
     lbl_camera.after(10, update_camera_feed)  # Update the camera feed every 10 ms
+
 
 # Function to monitor button presses
 def monitor_gpio():
@@ -550,9 +578,13 @@ def monitor_gpio():
                     combine_svgs()  # Combine SVGs
                 time.sleep(0.2)  # Debounce delay
 
-            if directory_dialog_open:  # Custom flag to check if directory dialog is open
+            if (
+                directory_dialog_open
+            ):  # Custom flag to check if directory dialog is open
                 if GPIO.input(green_button_pin) == GPIO.LOW:
-                    root.event_generate('<Return>')  # Simulate Enter key to close the dialog
+                    root.event_generate(
+                        "<Return>"
+                    )  # Simulate Enter key to close the dialog
                     time.sleep(0.2)
 
     except RuntimeError as e:
@@ -561,6 +593,7 @@ def monitor_gpio():
 
     if running:
         gpio_monitor_task = root.after(100, monitor_gpio)
+
 
 # Function to restart for a new process
 def start_another_process():
@@ -584,15 +617,19 @@ def start_another_process():
     # Rerun user variable initialization
     select_directory()
 
+
 def quit_program():
     global running, gpio_monitor_task
     running = False  # Stop the GPIO monitoring loop
 
     if gpio_monitor_task is not None:
-        root.after_cancel(gpio_monitor_task)  # Cancel the scheduled GPIO monitoring task
+        root.after_cancel(
+            gpio_monitor_task
+        )  # Cancel the scheduled GPIO monitoring task
         gpio_monitor_task = None  # Reset the task handle to avoid future issues
 
-    root.quit()     # Quit the Tkinter application
+    root.quit()  # Quit the Tkinter application
+
 
 # Create the main window
 root = tk.Tk()
@@ -601,32 +638,62 @@ root.title("SVG Capture Tool")
 # Adjust the window size
 root.configure(bg="#B5C689")
 
+
 # Function to set fullscreen when the window is mapped
 def set_fullscreen(event=None):
-    root.attributes('-fullscreen', True)
+    root.attributes("-fullscreen", True)
+
 
 # Bind the set_fullscreen function to the <Map> event
-root.bind('<Map>', set_fullscreen)
+root.bind("<Map>", set_fullscreen)
 
 # ------------- HOME SCREEN FRAME -------------
 home_frame = tk.Frame(root, bg="#B5C689")
 
 # Add a welcome label
-lbl_welcome = tk.Label(home_frame, text="Welcome to the SVG Capture Tool", font=("Arial", 20), bg="#B5C689")
+lbl_welcome = tk.Label(
+    home_frame, text="Welcome to the SVG Capture Tool", font=("Arial", 20), bg="#B5C689"
+)
 lbl_welcome.pack(pady=20)
 
 # Add buttons for the home screen
-btn_go_to_app = tk.Button(home_frame, text="Start App", font=("Arial", 16), command=go_to_app, bg="#2196F3", fg="white")
+btn_go_to_app = tk.Button(
+    home_frame,
+    text="Start App",
+    font=("Arial", 16),
+    command=go_to_app,
+    bg="#2196F3",
+    fg="white",
+)
 btn_go_to_app.pack(pady=10)
 
-btn_open_docs = tk.Button(home_frame, text="Open Docs", font=("Arial", 16), command=open_docs, bg="#4CAF50", fg="white")
+btn_open_docs = tk.Button(
+    home_frame,
+    text="Open Docs",
+    font=("Arial", 16),
+    command=open_docs,
+    bg="#4CAF50",
+    fg="white",
+)
 btn_open_docs.pack(pady=10)
 
-btn_quit = tk.Button(home_frame, text="Quit", font=("Arial", 16), command=quit_program, bg="red", fg="white")
+btn_quit = tk.Button(
+    home_frame,
+    text="Quit",
+    font=("Arial", 16),
+    command=quit_program,
+    bg="red",
+    fg="white",
+)
 btn_quit.pack(pady=10)
 
 # Add instructions label
-lbl_instructions = tk.Label(home_frame, text="Tap an option or use the button that corresponds with its colour.", font=("Arial", 20), bg="#B5C689")
+lbl_instructions = tk.Label(
+    home_frame,
+    text="Tap an option or use the button that corresponds with its colour.",
+    font=("Arial", 20),
+    bg="#B5C689",
+)
 lbl_instructions.pack(pady=20)
 
 # Pack the home frame (this is the first screen the user will see)
@@ -732,7 +799,7 @@ lbl_camera.bind("<B1-Motion>", update_crop)
 lbl_camera.bind("<ButtonRelease-1>", finish_crop)
 
 # Bind the Enter key to finalize the crop zone
-root.bind('<Return>', finalize_crop_zone)
+root.bind("<Return>", finalize_crop_zone)
 
 # Create a blank placeholder image
 blank_img = Image.new("RGB", (200, 200), color=(0, 0, 0))  # Black image
