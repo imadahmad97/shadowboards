@@ -12,6 +12,7 @@ import RPi.GPIO as GPIO
 import time
 import webbrowser
 import xml.etree.ElementTree as ET
+import utils.barrel as barrel
 
 
 # Initialize the camera
@@ -42,6 +43,13 @@ run_title = ""
 directory_dialog_open = False
 gpio_monitor_task = None
 PIXELS_PER_CM = 24.16
+
+# Barrel Distortion Variables (calculated with barrel.py)
+ret = barrel.ret
+mtx = barrel.mtx
+dist = barrel.dist
+rvecs = barrel.rvecs
+tvecs = barrel.tvecs
 
 # Variables for crop zone selection
 start_x = None
@@ -92,6 +100,16 @@ def capture_and_convert_to_svg():
 
     # Load the captured image
     image = cv2.imread(image_path)
+    
+    h,  w = image.shape[:2]
+    newcameramtx, roi = cv2.getOptimalNewCameraMatrix(mtx, dist, (w,h), 1, (w,h))
+
+    # undistort
+    dst = cv2.undistort(image, mtx, dist, None, newcameramtx)
+ 
+    # crop the image
+    x, y, w, h = roi
+    image = dst[y:y+h, x:x+w]
 
     # If crop zone is selected, crop the image
     if crop_selected and crop_coords:
