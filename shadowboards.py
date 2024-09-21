@@ -41,7 +41,7 @@ output_directory = ""
 run_title = ""
 directory_dialog_open = False
 gpio_monitor_task = None
-PIXELS_PER_CM = 22.38
+PIXELS_PER_CM = 24.16
 
 # Variables for crop zone selection
 start_x = None
@@ -66,7 +66,7 @@ def open_docs():
 
 # Function to capture image and convert to SVG
 def capture_and_convert_to_svg():
-    global image_count, output_directory
+    global image_count, output_directory, PIXELS_PER_CM
 
     if not output_directory:
         messagebox.showerror("Error", "Please select an output directory first.")
@@ -140,7 +140,7 @@ def capture_and_convert_to_svg():
     height_px, width_px = image.shape[:2]
 
     # Compute the width and height in centimeters
-    pixels_per_cm = 22.38  # Your calculated value
+    pixels_per_cm = PIXELS_PER_CM  # Your calculated value
     width_cm = width_px / pixels_per_cm
     height_cm = height_px / pixels_per_cm
 
@@ -163,6 +163,8 @@ def capture_and_convert_to_svg():
     root_svg.set('width', f'{width_cm}cm')
     root_svg.set('height', f'{height_cm}cm')
     root_svg.set('viewBox', f'0 0 {width_px} {height_px}')
+    print(width_cm)
+    print(height_cm)
 
     # Write the modified SVG back to file
     tree.write(svg_path)
@@ -176,7 +178,7 @@ def capture_and_convert_to_svg():
 
 # Function to combine all SVGs into a single file
 def combine_svgs():
-    global svg_files, output_directory
+    global svg_files, output_directory, PIXELS_PER_CM
 
     if not svg_files:
         messagebox.showerror("Error", "No SVG files to combine.")
@@ -187,7 +189,7 @@ def combine_svgs():
     individual_svgs = []
 
     # Pixels per cm
-    pixels_per_cm = 22.38  # Your calculated value
+    pixels_per_cm = PIXELS_PER_CM  # Your calculated value
 
     # Variables to calculate total width and height in pixels
     max_width_px = 0
@@ -206,8 +208,8 @@ def combine_svgs():
         width_cm = float(root_svg.get('width').replace('cm', ''))
         height_cm = float(root_svg.get('height').replace('cm', ''))
 
-        width_px = width_cm * pixels_per_cm
-        height_px = height_cm * pixels_per_cm
+        width_px = width_cm / pixels_per_cm
+        height_px = height_cm / pixels_per_cm
 
         # Update total dimensions
         max_width_px = max(max_width_px, width_px)
