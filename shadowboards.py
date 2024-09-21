@@ -72,7 +72,7 @@ def go_to_app():
 
 # Function to allow the user to open the docs
 def open_docs():
-    webbrowser.open("https://docs.example.com")
+    webbrowser.open("https://youtu.be/l79OpbDlW8Q")
 
 
 # Function to capture image and convert to SVG
@@ -669,7 +669,7 @@ btn_go_to_app.pack(pady=10)
 
 btn_open_docs = tk.Button(
     home_frame,
-    text="Open Docs",
+    text="How to use",
     font=("Arial", 16),
     command=open_docs,
     bg="#4CAF50",
