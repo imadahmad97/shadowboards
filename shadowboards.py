@@ -5,11 +5,14 @@ import cv2
 import numpy as np
 import subprocess
 import os
+import re
 import tempfile
 from picamera2 import Picamera2
 import RPi.GPIO as GPIO
 import time
 import webbrowser
+import xml.etree.ElementTree as ET
+
 
 # Initialize the camera
 picam2 = Picamera2()
@@ -38,6 +41,7 @@ output_directory = ""
 run_title = ""
 directory_dialog_open = False
 gpio_monitor_task = None
+PIXELS_PER_CM = 22.38
 
 # Variables for crop zone selection
 start_x = None
@@ -125,17 +129,50 @@ def capture_and_convert_to_svg():
     # Invert the mask to have the outline as black on white
     mask_inv = cv2.bitwise_not(mask)
 
-    # Save the mask to a temporary in-memory PGM file
+    # Save the mask to a temporary PGM file
     with tempfile.NamedTemporaryFile(suffix=".pgm", delete=True) as temp_pgm:
         cv2.imwrite(temp_pgm.name, mask_inv)
 
         # Run potrace using the temporary PGM file
         subprocess.run(["potrace", "-s", "-o", svg_path, temp_pgm.name])
 
+    # Compute the width and height in pixels
+    height_px, width_px = image.shape[:2]
+
+    # Compute the width and height in centimeters
+    pixels_per_cm = 22.38  # Your calculated value
+    width_cm = width_px / pixels_per_cm
+    height_cm = height_px / pixels_per_cm
+
+    # Modify the SVG file to include the correct dimensions
+    import xml.etree.ElementTree as ET
+
+    # Parse the SVG file
+    tree = ET.parse(svg_path)
+    root_svg = tree.getroot()
+
+    # Define the SVG namespace
+    svg_ns = {'svg': 'http://www.w3.org/2000/svg'}
+
+    # Remove existing width, height, and viewBox attributes
+    for attr in ['width', 'height', 'viewBox']:
+        if attr in root_svg.attrib:
+            del root_svg.attrib[attr]
+
+    # Set new width, height, and viewBox attributes
+    root_svg.set('width', f'{width_cm}cm')
+    root_svg.set('height', f'{height_cm}cm')
+    root_svg.set('viewBox', f'0 0 {width_px} {height_px}')
+
+    # Write the modified SVG back to file
+    tree.write(svg_path)
+
     # Add the SVG path to the list for combining later
     svg_files.append(svg_path)
 
     lbl_pics_taken.config(text=f"Photos Processed: {image_count}")
+
+
 
 # Function to combine all SVGs into a single file
 def combine_svgs():
@@ -149,102 +186,97 @@ def combine_svgs():
 
     individual_svgs = []
 
-    # Variables to calculate total width and height
-    max_width = 0
-    total_height = 0
+    # Pixels per cm
+    pixels_per_cm = 22.38  # Your calculated value
 
-    # First, parse all SVGs to extract their width, height, and content
+    # Variables to calculate total width and height in pixels
+    max_width_px = 0
+    total_height_px = 0
+
+    from lxml import etree
+
+    # Parse all SVGs to extract their width, height, and content
     for svg_file in svg_files:
-        with open(svg_file, "r") as f:
-            svg_content = f.read()
+        # Parse the SVG file using lxml
+        parser = etree.XMLParser(ns_clean=True, recover=True)
+        tree = etree.parse(svg_file, parser)
+        root_svg = tree.getroot()
 
-            # Extract the width and height from the SVG header
-            width = None
-            height = None
-            viewBox = None
+        # Extract width and height from the SVG root element
+        width_cm = float(root_svg.get('width').replace('cm', ''))
+        height_cm = float(root_svg.get('height').replace('cm', ''))
 
-            # Find the <svg> tag
-            svg_tag_start = svg_content.find("<svg")
-            svg_tag_end = svg_content.find(">", svg_tag_start) + 1
-            svg_tag = svg_content[svg_tag_start:svg_tag_end]
+        width_px = width_cm * pixels_per_cm
+        height_px = height_cm * pixels_per_cm
 
-            # Extract width, height, and viewBox
-            import re
-            width_match = re.search(r'width="([\d\.]+)([a-zA-Z%]+)?"', svg_tag)
-            height_match = re.search(r'height="([\d\.]+)([a-zA-Z%]+)?"', svg_tag)
-            viewbox_match = re.search(r'viewBox="([^"]+)"', svg_tag)
+        # Update total dimensions
+        max_width_px = max(max_width_px, width_px)
+        total_height_px += height_px
 
-            if width_match:
-                width_value = width_match.group(1)
-                width_unit = width_match.group(2)
-                width = float(width_value)
-            else:
-                width = None
+        # Remove namespace prefixes for simplicity
+        for elem in root_svg.getiterator():
+            if not hasattr(elem.tag, 'find'):
+                continue  # It's a comment or similar
+            i = elem.tag.find('}')
+            if i >= 0:
+                elem.tag = elem.tag[i+1:]
 
-            if height_match:
-                height_value = height_match.group(1)
-                height_unit = height_match.group(2)
-                height = float(height_value)
-            else:
-                height = None
+        # Extract the inner content of the SVG (excluding the outer <svg> tag)
+        svg_inner = list(root_svg)
 
-            if viewbox_match:
-                viewBox = viewbox_match.group(1)
+        individual_svgs.append({
+            'width_px': width_px,
+            'height_px': height_px,
+            'content': svg_inner
+        })
 
-            # If width or height not found, try to get them from viewBox
-            if width is None or height is None:
-                if viewBox:
-                    viewBox_values = list(map(float, viewBox.strip().split()))
-                    width = viewBox_values[2] - viewBox_values[0]
-                    height = viewBox_values[3] - viewBox_values[1]
-                else:
-                    # Set default width and height if not available
-                    width = 0
-                    height = 0
+    # Compute total dimensions in cm
+    max_width_cm = max_width_px / pixels_per_cm
+    total_height_cm = total_height_px / pixels_per_cm
 
-            # Update max_width and total_height
-            max_width = max(max_width, width)
-            total_height += height
+    # Create the combined SVG root element
+    from lxml import etree
 
-            # Extract SVG body content
-            svg_body = svg_content[svg_tag_end:]
-            svg_body = svg_body.replace("</svg>", "")
+    SVG_NS = "http://www.w3.org/2000/svg"
+    NSMAP = {None: SVG_NS}
 
-            individual_svgs.append({
-                'width': width,
-                'height': height,
-                'content': svg_body
-            })
+    combined_svg = etree.Element('svg', nsmap=NSMAP)
+    combined_svg.set('version', '1.1')
+    combined_svg.set('width', f"{max_width_cm}cm")
+    combined_svg.set('height', f"{total_height_cm}cm")
+    combined_svg.set('viewBox', f"0 0 {max_width_px} {total_height_px}")
 
-    # Create a header for the combined SVG file with appropriate dimensions
-    svg_header = f"""<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="{max_width}" height="{total_height}" viewBox="0 0 {max_width} {total_height}">\n"""
-    svg_footer = """</svg>"""
+    current_y = 0  # Starting Y position in pixels
 
-    # Now, write the combined SVG file
-    with open(combined_svg_path, "w") as combined_svg:
-        combined_svg.write(svg_header)
+    for svg_info in individual_svgs:
+        # Create a group element with the appropriate translation
+        g_element = etree.SubElement(combined_svg, 'g')
+        g_element.set('transform', f"translate(0, {current_y})")
 
-        current_y = 0  # Starting Y position
+        # Append the individual SVG content to the group
+        for elem in svg_info['content']:
+            g_element.append(elem)
 
-        for svg_info in individual_svgs:
-            # Wrap each SVG content in a <g> element and translate its position
-            translated_svg_body = f'<g transform="translate(0, {current_y})">\n{svg_info["content"]}\n</g>\n'
-            combined_svg.write(translated_svg_body)
+        # Update the Y position for the next SVG
+        current_y += svg_info['height_px']
 
-            # Update the Y position for the next SVG
-            current_y += svg_info['height']
-
-        combined_svg.write(svg_footer)
+    # Write the combined SVG to file
+    tree = etree.ElementTree(combined_svg)
+    tree.write(combined_svg_path, encoding='UTF-8', xml_declaration=True, pretty_print=True)
 
     messagebox.showinfo(
         "Success", f"All SVGs combined and saved as {combined_svg_path}"
     )
 
-    # Reset the image count and svg files for the next set
+    # Reset for the next set
     global image_count
     image_count = 0
     svg_files = []
     lbl_pics_taken.config(text=f"Photos Processed: {image_count}")
+
+
+
+
     
 # Function to select a directory
 def select_directory():
